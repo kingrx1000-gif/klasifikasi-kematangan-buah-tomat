@@ -1,100 +1,60 @@
 import streamlit as st
-import cv2
 import numpy as np
+from PIL import Image
 
-# ================= CONFIG =================
 st.set_page_config(
     page_title="Fruit Ripeness Detection",
-    page_icon="🍎",
+    page_icon="🍅",
     layout="centered"
 )
 
-# ================= HEADER =================
 st.markdown(
-    """
-    <h1 style='text-align: center;'>🍎 Fruit Ripeness Detection</h1>
-    <p style='text-align: center; color: gray;'>
-    Klasifikasi kematangan buah berdasarkan warna dominan (HSV)
-    </p>
-    """,
+    "<h1 style='text-align:center;'>🍅 Fruit Ripeness Detection</h1>",
     unsafe_allow_html=True
 )
 
-st.divider()
-
-# ================= UPLOAD =================
 uploaded_file = st.file_uploader(
-    "📤 Upload gambar buah",
-    type=["jpg", "jpeg", "png"]
+    "Upload gambar buah", type=["jpg", "jpeg", "png"]
 )
 
-# ================= LOGIC =================
-def deteksi_kematangan(image):
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+def deteksi_kematangan_pil(img):
+    img = img.convert("RGB")
+    data = np.array(img)
 
-    hijau = cv2.inRange(hsv, np.array([35, 50, 50]), np.array([85, 255, 255]))
-    kuning = cv2.inRange(hsv, np.array([20, 50, 50]), np.array([34, 255, 255]))
+    r, g, b = data[:,:,0], data[:,:,1], data[:,:,2]
 
-    merah1 = cv2.inRange(hsv, np.array([0, 50, 50]), np.array([10, 255, 255]))
-    merah2 = cv2.inRange(hsv, np.array([170, 50, 50]), np.array([180, 255, 255]))
-    merah = merah1 + merah2
+    hijau = np.sum((g > r) & (g > b))
+    merah = np.sum((r > g) & (r > b))
+    kuning = np.sum((r > 150) & (g > 150) & (b < 120))
 
-    hijau_px = cv2.countNonZero(hijau)
-    kuning_px = cv2.countNonZero(kuning)
-    merah_px = cv2.countNonZero(merah)
-
-    total = hijau_px + kuning_px + merah_px + 1
+    total = hijau + kuning + merah + 1
 
     persentase = {
-        "Hijau": hijau_px / total,
-        "Kuning": kuning_px / total,
-        "Merah": merah_px / total
+        "Hijau": hijau / total,
+        "Kuning": kuning / total,
+        "Merah": merah / total
     }
 
-    if persentase["Hijau"] > persentase["Kuning"] and persentase["Hijau"] > persentase["Merah"]:
-        status = "Masih Mentah"
-        warna = "🟢"
-        tingkat = persentase["Hijau"]
+    if persentase["Hijau"] > persentase["Merah"] and persentase["Hijau"] > persentase["Kuning"]:
+        return "Masih Mentah 🟢", persentase["Hijau"], persentase
     elif persentase["Merah"] > persentase["Hijau"] and persentase["Merah"] > persentase["Kuning"]:
-        status = "Matang"
-        warna = "🔴"
-        tingkat = persentase["Merah"]
+        return "Matang 🔴", persentase["Merah"], persentase
     else:
-        status = "Setengah Matang"
-        warna = "🟡"
-        tingkat = persentase["Kuning"]
+        return "Setengah Matang 🟡", persentase["Kuning"], persentase
 
-    return status, warna, tingkat, persentase
-
-# ================= DISPLAY =================
 if uploaded_file:
-    bytes_data = np.frombuffer(uploaded_file.read(), np.uint8)
-    img = cv2.imdecode(bytes_data, cv2.IMREAD_COLOR)
+    img = Image.open(uploaded_file)
 
-    st.image(
-        cv2.cvtColor(img, cv2.COLOR_BGR2RGB),
-        caption="Gambar Buah",
-        use_container_width=True
-    )
+    st.image(img, caption="Gambar Buah", use_container_width=True)
 
-    status, ikon, tingkat, persentase = deteksi_kematangan(img)
+    status, tingkat, p = deteksi_kematangan_pil(img)
 
-    st.divider()
-
-    st.markdown(
-        f"""
-        <h2 style='text-align:center;'>{ikon} {status}</h2>
-        """,
-        unsafe_allow_html=True
-    )
-
+    st.subheader(status)
     st.progress(float(tingkat))
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Hijau", f"{persentase['Hijau']*100:.1f}%")
-    col2.metric("Kuning", f"{persentase['Kuning']*100:.1f}%")
-    col3.metric("Merah", f"{persentase['Merah']*100:.1f}%")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Hijau", f"{p['Hijau']*100:.1f}%")
+    c2.metric("Kuning", f"{p['Kuning']*100:.1f}%")
+    c3.metric("Merah", f"{p['Merah']*100:.1f}%")
 
-    st.caption(
-        "Sistem menentukan kematangan berdasarkan proporsi warna dominan pada ruang warna HSV."
-    )
+    st.caption("Deteksi dilakukan berdasarkan dominasi warna RGB (tanpa OpenCV).")
